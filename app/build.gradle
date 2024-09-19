@@ -1,6 +1,4 @@
-plugins {
-    alias(libs.plugins.android.application)
-}
+apply plugin: "com.android.application"
 
 android {
     namespace 'com.chdman'
@@ -9,7 +7,7 @@ android {
     defaultConfig {
         applicationId "com.chdman"
         minSdk 23
-        targetSdk 34
+        targetSdk 28
         versionCode 1
         versionName "1.0"
 

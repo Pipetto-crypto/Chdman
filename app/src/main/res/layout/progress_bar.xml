@@ -8,7 +8,9 @@
     tools:context=".MainActivity">
     <ProgressBar
         android:id="@+id/progress_bar"
-        android:layout_width="fill_parent"
+        android:layout_width="match_parent"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
         android:layout_height="wrap_content"
         style="?android:attr/progressBarStyleHorizontal"
         android:indeterminateOnly="true"  />

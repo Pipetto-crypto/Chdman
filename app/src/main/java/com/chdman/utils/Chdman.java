@@ -1,5 +1,9 @@
 package com.chdman.utils;
 import android.content.DialogInterface;
+import java.lang.reflect.Array;
+import java.nio.Buffer;
+import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -25,54 +29,47 @@ public class Chdman {
     
     private String executable;
     private Handler handler;
-    private Thread outputThread;
-    private BufferedReader outputBuffer;
-    private File outputFile;
-    private Process p;
+    private boolean interrupter;
+    private int completedOperations;
+    private LinkedList<BufferedReader> outputBufferQueue;
+    private ArrayList<File> outputFileList;
+    private LinkedList<Thread> threadQueue;
     private Context mContext;
     
-    private Runnable printToLogcat() {
-        Runnable r = new Runnable() {
-            @Override
-            public void run() {
-                try {
-                     outputBuffer = new BufferedReader(new InputStreamReader(p.getInputStream()));
-                     String line;
-                     while (!Thread.currentThread().isInterrupted()) {
-                         line = outputBuffer.readLine();
-                         if (line != null)   
-                            Log.d("CHDMAN: ", line);
-                     }
-                 }       
-                 catch (IOException e) {
-                     throw new RuntimeException(e);
-                 }
-             }     
-        };
-        return r;
+    private void cancel() {
+        interrupter = true;
+        for (Thread t : threadQueue) {
+            t.interrupt();
+        }
+        try {
+            for (BufferedReader br : outputBufferQueue) {
+                br.close();
+            }
+        }
+        catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        for (File f : outputFileList)
+            f.delete();    
     }
     
-    private AlertDialog createAlertDialog(String title, String message) {
+    private void reset() {
+        outputFileList.clear();
+        outputBufferQueue.clear();
+        threadQueue.clear();
+        interrupter = false;
+        completedOperations = 0;
+    }
+    
+    private AlertDialog createAlertDialog(String title) {
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(mContext);
         AlertDialog dialog;
         builder.setTitle(title);
-        builder.setMessage(message);
         builder.setCancelable(false);
         builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int btn) {
-                outputThread.interrupt(); 
-                try {
-                    outputBuffer.close();
-                }
-                catch (IOException e) {
-                    throw new RuntimeException(e);
-                }     
-                if (p.isAlive())
-                    p.destroyForcibly();
-                if (outputFile.exists())    
-                    outputFile.delete();
-                dialog.dismiss();
+                cancel();
             }
         });
         builder.setView(R.layout.progress_bar);
@@ -81,56 +78,112 @@ public class Chdman {
     }
     
     private void showAlertDialog(AlertDialog dlg) {
-        handler.post (new Runnable(){
-             @Override
-             public void run() {
-                 dlg.show();
-             }
-        });
+        final Runnable showDialog = new Runnable() {
+            @Override
+            public void run() {
+                dlg.show();
+            }
+        };
+        handler.post(showDialog);
     }
     
     private void hideAlertDialog(AlertDialog dlg) {
-        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
-        final Runnable runnable = new Runnable() {
+        final Runnable hideDialog = new Runnable() {
             @Override
             public void run() {
                 dlg.hide();
             }
         };
-        executor.scheduleAtFixedRate(new Runnable() {
+        handler.post(hideDialog);
+    }
+    
+    private void processProgressBar(AlertDialog dlg) {
+        final ExecutorService executor = Executors.newSingleThreadExecutor();
+        dlg.setMessage(outputFileList.get(completedOperations).getName());
+        showAlertDialog(dlg);
+        executor.execute(new Runnable(){
             @Override
             public void run() {
-                if (!p.isAlive()) 
-                    handler.post(runnable);
-            }        
-        }, 0, 1, TimeUnit.SECONDS);
+                if (threadQueue.isEmpty() || interrupter) {
+                    hideAlertDialog(dlg);
+                }           
+                else {
+                    try {
+                        Thread processThread = threadQueue.peek();
+                        processThread.start();
+                        processThread.join();
+                        if (!interrupter) {
+                            threadQueue.pop();     
+                            completedOperations++;
+                            String fileName = outputFileList.get(completedOperations).getName();
+                            dlg.setMessage(fileName);     
+                        }
+                        executor.execute(this);    
+                    }
+                    catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }   
+                }     
+            } 
+        });
     }
     
     public Chdman(Context ctx) {
         this.mContext = ctx;
         this.executable = mContext.getFilesDir().getAbsolutePath() + "/bin/chdman";
         this.handler = new Handler(Looper.getMainLooper());
-        this.p = null;
-        this.outputThread = null;
+        this.outputFileList = new ArrayList<>();
+        this.outputBufferQueue = new LinkedList<>();
+        this.threadQueue = new LinkedList<>();
+        this.completedOperations = 0;
+        this.interrupter = false;
     }
     
-    public void compress(String file) {
-        outputThread = new Thread(printToLogcat());
-        String fileName = Paths.get(file).getFileName().toString();
+    private void createcd(String file) {
         String output = file.substring(0, file.lastIndexOf(".")) + ".chd";
-        outputFile = new File(output);
+        File outputFile = new File(output);
+        outputFileList.add(outputFile);
         String[] cmd = {this.executable, "createcd", "-i", file, "-o", output};
-        ProcessBuilder pb = new ProcessBuilder(cmd);
+        final ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.redirectErrorStream(true);
-        AlertDialog dialog = createAlertDialog("Compress", fileName);
-        showAlertDialog(dialog);
-        try {
-            p = pb.start();
-            outputThread.start();
-            hideAlertDialog(dialog);
+        Runnable r = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                     Process p = pb.start();
+                     BufferedReader outputBuffer = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                     outputBufferQueue.add(outputBuffer);
+                     String line;
+                     while (!Thread.currentThread().isInterrupted()) {
+                         line = outputBuffer.readLine();
+                         if (line != null)   
+                            Log.d("CHDMAN: ", line);
+                         else {
+                            Thread.currentThread().interrupt();
+                         }   
+                     }
+                 }       
+                 catch (IOException e) {
+                     throw new RuntimeException(e);
+                 }
+             }     
+        };
+        Thread cmdThread = new Thread(r);
+        threadQueue.add(cmdThread);
+    }
+    
+    public void batchCompress(LinkedList<String> list) {
+        reset();
+        AlertDialog dialog = createAlertDialog("Compress");
+        for (String file : list) {
+            String extension = file.substring(file.lastIndexOf(".") + 1, file.length());
+            if (extension.equals("iso") || extension.equals("cue") || extension.equals("gdi")) {
+                createcd(file);
+            } 
         }
-        catch (IOException e) {
-            throw new RuntimeException(e);
+        if (threadQueue.size() > 0) {
+            processProgressBar(dialog);
         }
+        list.clear();    
     }
 }

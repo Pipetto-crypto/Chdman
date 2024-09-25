@@ -5,6 +5,8 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Settings;
+import android.util.Log;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import android.view.View;
 import com.chdman.utils.Chdman;
@@ -13,6 +15,7 @@ import com.chdman.utils.FileUtils;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import java.io.File;
+import java.util.LinkedList;
 
 public class MainActivity extends AppCompatActivity {
     
@@ -54,17 +57,16 @@ public class MainActivity extends AppCompatActivity {
         btn.setOnClickListener(new View.OnClickListener(){
             @Override
             public void onClick(View v) {
-                picker.launch("*/*");
+                picker.pickMultiple("*/*");
             }          
         });
     }
     
     @Override
     public void onResume() {
-        String file = picker.getFile();
-        if (file != "") {
-            chdman.compress(file);  
-        }
+        LinkedList<String> filesList = picker.getFilesList();
+        if (filesList.size() > 0) 
+            chdman.batchCompress(filesList);
         super.onResume();
     }
 }

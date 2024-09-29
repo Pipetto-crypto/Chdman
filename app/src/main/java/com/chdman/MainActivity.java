@@ -2,6 +2,7 @@ package com.chdman;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Settings;
@@ -45,10 +46,8 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private void enableStoragePermission() {
-        if(!Environment.isExternalStorageManager()) {
-            Intent grantPermission = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
-            startActivity(grantPermission);
-        }
+        final String[] permissions = new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE};
+        getInstance().requestPermissions(permissions, PackageManager.PERMISSION_GRANTED);
     }
 
     @Override

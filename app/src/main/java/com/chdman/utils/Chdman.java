@@ -1,5 +1,8 @@
 package com.chdman.utils;
+
 import android.content.DialogInterface;
+
+import java.lang.reflect.Field;
 import java.nio.Buffer;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -9,6 +12,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import com.chdman.R;
 import android.content.Context;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -23,6 +27,8 @@ import java.util.concurrent.Executors;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Chdman {
     
@@ -165,9 +171,15 @@ public class Chdman {
                              break;
                          Log.d("CHDMAN: ", line);
                      }
-                     if(p.isAlive())
-                         p.destroyForcibly();
-                 }       
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        if(p.isAlive())
+                            p.destroyForcibly();
+                    }
+                    else {
+                        int pid = new ProcessHelper(p).getPid();
+                        android.os.Process.killProcess(pid);
+                    }
+                }
                  catch (IOException e) {
                  }
              }     

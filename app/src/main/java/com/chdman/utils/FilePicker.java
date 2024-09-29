@@ -15,12 +15,13 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 
 import java.util.LinkedList;
+import java.io.File;
 
 public class FilePicker {
     private LinkedList<String> openedFiles = new LinkedList<>();
     private ActivityResultLauncher<Intent> arl;
     
-    private String pathFromUri(Uri uri) {
+    private void openFromUri(Uri uri) {
         String path = "";
         String documentID = uri.getPath();
         String[] splitted = documentID.split(":");
@@ -28,10 +29,18 @@ public class FilePicker {
             case "/document/primary":
                 path = Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + splitted[1];
                 break;
+            case "/tree/primary":
+                path = Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + splitted[1];
+                for (File f : new File(path).listFiles()) {
+                    if (f.isFile()) 
+                        openedFiles.add(f.getAbsolutePath());
+                }
+                break;
             default:
                 break;
         }
-        return path;
+        if (path != "")
+            openedFiles.add(path);
     }
 
     public FilePicker(AppCompatActivity act) {
@@ -41,15 +50,14 @@ public class FilePicker {
             public void onActivityResult(ActivityResult result) {
                 if (result.getResultCode() == Activity.RESULT_OK) {
                     Intent data = result.getData();
+                    Log.d("Content picked: ", data.getData().getPath());
                     if (data.getClipData() != null) {
                         for (int i = 0; i < data.getClipData().getItemCount(); i++) {
-                            String file = pathFromUri(data.getClipData().getItemAt(i).getUri());
-                            openedFiles.add(file);
+                            openFromUri(data.getClipData().getItemAt(i).getUri());
                         }
                     }
                     else {
-                        String file = pathFromUri(data.getData());
-                        openedFiles.add(file);
+                        openFromUri(data.getData());
                     }        
                 }
             }
@@ -63,6 +71,11 @@ public class FilePicker {
         launcher.setType(mimetype);
         Intent intent = Intent.createChooser(launcher, "Choose a file");
         this.arl.launch(intent);
+    }
+    
+    public void pickFolder() {
+        Intent launcher = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        this.arl.launch(launcher);
     }
 
     public LinkedList<String> getFilesList() {

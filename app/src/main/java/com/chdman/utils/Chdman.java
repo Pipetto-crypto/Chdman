@@ -1,6 +1,5 @@
 package com.chdman.utils;
 import android.content.DialogInterface;
-import java.lang.reflect.Array;
 import java.nio.Buffer;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -27,38 +26,37 @@ import java.util.concurrent.ScheduledExecutorService;
 
 public class Chdman {
     
+    private enum Status {
+        INITIALIZED,
+        REINITIALIZED,
+        RUNNING,
+        COMPLETED,
+        CANCELLED
+    };
+    
     private String executable;
     private Handler handler;
-    private boolean interrupter;
-    private int completedOperations;
-    private LinkedList<BufferedReader> outputBufferQueue;
-    private ArrayList<File> outputFileList;
-    private LinkedList<Thread> threadQueue;
+    private Status status;
+    private LinkedList<BufferedReader> outputBufferStack;
+    private LinkedList<File> fileStack;
+    private LinkedList<Thread> threadStack;
     private Context mContext;
     
-    private void cancel() {
-        interrupter = true;
-        for (Thread t : threadQueue) {
-            t.interrupt();
-        }
-        try {
-            for (BufferedReader br : outputBufferQueue) {
-                br.close();
-            }
-        }
-        catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        for (File f : outputFileList)
-            f.delete();    
+    public Chdman(Context ctx) {
+        this.mContext = ctx;
+        this.executable = mContext.getFilesDir().getAbsolutePath() + "/bin/chdman";
+        this.handler = new Handler(Looper.getMainLooper());
+        this.fileStack = new LinkedList<>();
+        this.outputBufferStack = new LinkedList<>();
+        this.threadStack = new LinkedList<>();
+        this.status = Status.INITIALIZED;
     }
     
-    private void reset() {
-        outputFileList.clear();
-        outputBufferQueue.clear();
-        threadQueue.clear();
-        interrupter = false;
-        completedOperations = 0;
+    private void clean() {
+        fileStack.clear();
+        outputBufferStack.clear();
+        threadStack.clear();
+        status = Status.REINITIALIZED;
     }
     
     private AlertDialog createAlertDialog(String title) {
@@ -69,7 +67,7 @@ public class Chdman {
         builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int btn) {
-                cancel();
+                status = Status.CANCELLED;
             }
         });
         builder.setView(R.layout.progress_bar);
@@ -99,81 +97,89 @@ public class Chdman {
     
     private void processProgressBar(AlertDialog dlg) {
         final ExecutorService executor = Executors.newSingleThreadExecutor();
-        dlg.setMessage(outputFileList.get(completedOperations).getName());
+        dlg.setMessage("");
         showAlertDialog(dlg);
         executor.execute(new Runnable(){
             @Override
             public void run() {
-                if (threadQueue.isEmpty() || interrupter) {
-                    hideAlertDialog(dlg);
-                }           
-                else {
+                Thread processThread = null;
+                File outputFile = null;
+                if (threadStack.isEmpty())
+                    status = Status.COMPLETED; 
+                if (status == Status.RUNNING){
                     try {
-                        Thread processThread = threadQueue.peek();
+                        processThread = threadStack.pop();
+                        outputFile = fileStack.pop();         
+                        String fileName = outputFile.getName();
+                        dlg.setMessage(fileName);     
                         processThread.start();
                         processThread.join();
-                        if (!interrupter) {
-                            threadQueue.pop();     
-                            completedOperations++;
-                            String fileName = outputFileList.get(completedOperations).getName();
-                            dlg.setMessage(fileName);     
-                        }
-                        executor.execute(this);    
                     }
                     catch (InterruptedException e) {
                         throw new RuntimeException(e);
-                    }   
-                }     
+                    }
+                }          
+                if (status == Status.COMPLETED) {
+                    clean();
+                    hideAlertDialog(dlg);
+                    return;    
+                }
+                if (status == Status.CANCELLED) {
+                     if (outputFile != null)    
+                         outputFile.delete();    
+                     try {
+                         for (BufferedReader br : outputBufferStack) {
+                             br.close();
+                         }
+                     }
+                     catch (IOException e) {
+                         throw new RuntimeException(e);
+                     }
+                     clean();  
+                     hideAlertDialog(dlg); 
+                     return;     
+                 }
+                 executor.execute(this);             
             } 
         });
-    }
-    
-    public Chdman(Context ctx) {
-        this.mContext = ctx;
-        this.executable = mContext.getFilesDir().getAbsolutePath() + "/bin/chdman";
-        this.handler = new Handler(Looper.getMainLooper());
-        this.outputFileList = new ArrayList<>();
-        this.outputBufferQueue = new LinkedList<>();
-        this.threadQueue = new LinkedList<>();
-        this.completedOperations = 0;
-        this.interrupter = false;
     }
     
     private void createcd(String file) {
         String output = file.substring(0, file.lastIndexOf(".")) + ".chd";
         File outputFile = new File(output);
-        outputFileList.add(outputFile);
         String[] cmd = {this.executable, "createcd", "-i", file, "-o", output};
         final ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.redirectErrorStream(true);
         Runnable r = new Runnable() {
             @Override
             public void run() {
+                Process p = null;
                 try {
-                     Process p = pb.start();
+                     p = pb.start();
                      BufferedReader outputBuffer = new BufferedReader(new InputStreamReader(p.getInputStream()));
-                     outputBufferQueue.add(outputBuffer);
+                     outputBufferStack.add(outputBuffer);
                      String line;
                      while (!Thread.currentThread().isInterrupted()) {
                          line = outputBuffer.readLine();
-                         if (line != null)   
-                            Log.d("CHDMAN: ", line);
-                         else {
-                            Thread.currentThread().interrupt();
-                         }   
+                         if (line == null || status == Status.CANCELLED)
+                             break;
+                         Log.d("CHDMAN: ", line);
                      }
+                     if(p.isAlive())
+                         p.destroyForcibly();
                  }       
                  catch (IOException e) {
-                     throw new RuntimeException(e);
                  }
              }     
         };
-        Thread cmdThread = new Thread(r);
-        threadQueue.add(cmdThread);
+        if (!outputFile.exists()) {
+            fileStack.add(outputFile);
+            Thread cmdThread = new Thread(r);
+            threadStack.add(cmdThread);
+        }    
     }
     
-    public void batchCompress(LinkedList<String> list) {
-        reset();
+    public void compress(LinkedList<String> list) {
         AlertDialog dialog = createAlertDialog("Compress");
         for (String file : list) {
             String extension = file.substring(file.lastIndexOf(".") + 1, file.length());
@@ -181,9 +187,8 @@ public class Chdman {
                 createcd(file);
             } 
         }
-        if (threadQueue.size() > 0) {
-            processProgressBar(dialog);
-        }
+        status = Status.RUNNING;
+        processProgressBar(dialog);
         list.clear();    
     }
 }

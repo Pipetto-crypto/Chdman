@@ -1,5 +1,6 @@
 package com.chdman.utils;
 
+import android.app.ActionBar;
 import android.content.DialogInterface;
 
 import java.lang.reflect.Field;
@@ -16,6 +17,10 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.widget.ArrayAdapter;
+import android.widget.LinearLayout;
+import android.widget.Spinner;
+
 import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.io.BufferedInputStream;
@@ -37,11 +42,10 @@ public class Chdman {
         REINITIALIZED,
         RUNNING,
         COMPLETED,
-        CANCELLED
     };
-    
-    private String executable;
+
     private Handler handler;
+    private String mode;
     private Status status;
     private LinkedList<BufferedReader> outputBufferStack;
     private LinkedList<File> fileStack;
@@ -50,7 +54,7 @@ public class Chdman {
     
     public Chdman(Context ctx) {
         this.mContext = ctx;
-        this.executable = mContext.getFilesDir().getAbsolutePath() + "/bin/chdman";
+        this.mode = "";
         this.handler = new Handler(Looper.getMainLooper());
         this.fileStack = new LinkedList<>();
         this.outputBufferStack = new LinkedList<>();
@@ -65,18 +69,32 @@ public class Chdman {
         status = Status.REINITIALIZED;
     }
     
-    private AlertDialog createAlertDialog(String title) {
+    private AlertDialog createProgressBarDialog(String title) {
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(mContext);
         AlertDialog dialog;
         builder.setTitle(title);
         builder.setCancelable(false);
-        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+        builder.setView(R.layout.progress_bar);
+        dialog = builder.create();
+        return dialog;
+    }
+    private AlertDialog createModesDialog(String title) {
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(mContext);
+        AlertDialog dialog;
+        builder.setTitle(title);
+        builder.setCancelable(false);
+        String[] modes = {"createcd", "createdvd"};
+        final ArrayAdapter<String> adp = new ArrayAdapter<>(mContext, android.R.layout.simple_spinner_dropdown_item, modes);
+        final Spinner sp = new Spinner(mContext);
+        sp.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        sp.setAdapter(adp);
+        builder.setView(sp);
+        builder.setPositiveButton("Done", new DialogInterface.OnClickListener() {
             @Override
-            public void onClick(DialogInterface dialog, int btn) {
-                status = Status.CANCELLED;
+            public void onClick(DialogInterface dialog, int which) {
+                mode = sp.getSelectedItem().toString();
             }
         });
-        builder.setView(R.layout.progress_bar);
         dialog = builder.create();
         return dialog;
     }
@@ -103,19 +121,22 @@ public class Chdman {
     
     private void processProgressBar(AlertDialog dlg) {
         final ExecutorService executor = Executors.newSingleThreadExecutor();
-        dlg.setMessage("");
-        showAlertDialog(dlg);
         executor.execute(new Runnable(){
             @Override
             public void run() {
                 Thread processThread = null;
                 File outputFile = null;
+                if (mode != "") {
+                    status = Status.RUNNING;
+                    dlg.setMessage("");
+                    showAlertDialog(dlg);
+                }
                 if (threadStack.isEmpty())
                     status = Status.COMPLETED; 
                 if (status == Status.RUNNING){
                     try {
                         processThread = threadStack.pop();
-                        outputFile = fileStack.pop();         
+                        outputFile = fileStack.pop();
                         String fileName = outputFile.getName();
                         dlg.setMessage(fileName);     
                         processThread.start();
@@ -130,61 +151,30 @@ public class Chdman {
                     hideAlertDialog(dlg);
                     return;    
                 }
-                if (status == Status.CANCELLED) {
-                     if (outputFile != null)    
-                         outputFile.delete();    
-                     try {
-                         for (BufferedReader br : outputBufferStack) {
-                             br.close();
-                         }
-                     }
-                     catch (IOException e) {
-                         throw new RuntimeException(e);
-                     }
-                     clean();  
-                     hideAlertDialog(dlg); 
-                     return;     
-                 }
-                 executor.execute(this);             
+                executor.execute(this);
             } 
         });
     }
     
-    private void createcd(String file) {
+    private void createCHD(String file) {
         String output = file.substring(0, file.lastIndexOf(".")) + ".chd";
         File outputFile = new File(output);
-        String[] cmd = {this.executable, "createcd", "-i", file, "-o", output};
-        final ProcessBuilder pb = new ProcessBuilder(cmd);
-        pb.redirectErrorStream(true);
         Runnable r = new Runnable() {
             @Override
             public void run() {
-                Process p = null;
-                try {
-                     p = pb.start();
-                     BufferedReader outputBuffer = new BufferedReader(new InputStreamReader(p.getInputStream()));
-                     outputBufferStack.add(outputBuffer);
-                     String line;
-                     while (!Thread.currentThread().isInterrupted()) {
-                         line = outputBuffer.readLine();
-                         if (line == null || status == Status.CANCELLED)
-                             break;
-                         Log.d("CHDMAN: ", line);
-                     }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        if(p.isAlive())
-                            p.destroyForcibly();
-                    }
-                    else {
-                        int pid = new ProcessHelper(p).getPid();
-                        android.os.Process.killProcess(pid);
-                    }
+                switch(mode) {
+                    case "createcd":
+                        createcd(file, output);
+                        break;
+                    case "createdvd":
+                        createdvd(file, output);
+                        break;
                 }
-                 catch (IOException e) {
-                 }
-             }     
+            }
         };
         if (!outputFile.exists()) {
+            AlertDialog modesDialog = createModesDialog("Select mode");
+            showAlertDialog(modesDialog);
             fileStack.add(outputFile);
             Thread cmdThread = new Thread(r);
             threadStack.add(cmdThread);
@@ -192,15 +182,21 @@ public class Chdman {
     }
     
     public void compress(LinkedList<String> list) {
-        AlertDialog dialog = createAlertDialog("Compress");
+        AlertDialog dialog = createProgressBarDialog("Compress");
         for (String file : list) {
             String extension = file.substring(file.lastIndexOf(".") + 1, file.length());
             if (extension.equals("iso") || extension.equals("cue") || extension.equals("gdi")) {
-                createcd(file);
-            } 
+                createCHD(file);
+            }
         }
-        status = Status.RUNNING;
         processProgressBar(dialog);
         list.clear();    
+    }
+
+    private native void createcd(String in, String out);
+    private native void createdvd(String in, String out);
+
+    static {
+        System.loadLibrary("chdman");
     }
 }

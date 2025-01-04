@@ -1,0 +1,6 @@
+[submodule "app/src/main/cpp/mame"]
+	path = app/src/main/cpp/mame
+	url = https://github.com/Pipetto-crypto/mame.git
+[submodule "app/src/main/cpp/ogg"]
+	path = app/src/main/cpp/ogg
+	url = https://github.com/soundcloud/ogg.git

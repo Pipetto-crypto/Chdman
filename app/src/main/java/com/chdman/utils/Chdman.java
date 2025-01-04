@@ -66,6 +66,7 @@ public class Chdman {
         fileStack.clear();
         outputBufferStack.clear();
         threadStack.clear();
+        mode = "";
         status = Status.REINITIALIZED;
     }
     

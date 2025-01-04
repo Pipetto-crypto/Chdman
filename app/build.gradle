@@ -15,13 +15,6 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    splits.abi {
-        enable true
-        reset()
-        include "arm64-v8a"
-        universalApk true
-    }
-
     packagingOptions {
         jniLibs {
             useLegacyPackaging true

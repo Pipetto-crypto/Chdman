@@ -16,7 +16,6 @@ import android.view.View;
 import androidx.appcompat.widget.PopupMenu;
 import com.chdman.utils.Chdman;
 import com.chdman.utils.FilePicker;
-import com.chdman.utils.FileUtils;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import java.io.File;
@@ -33,18 +32,6 @@ public class MainActivity extends AppCompatActivity {
         return this;
     }
 
-    private void extractChdmanBinary() {
-        FileUtils futils = new FileUtils(getInstance());
-        File binaryDir = new File(getFilesDir().getAbsolutePath() + "/bin/");
-        File binary = new File(binaryDir.getAbsolutePath() + "/chdman");
-        if (!binaryDir.exists())
-            binaryDir.mkdirs();
-        if (!binary.exists()) {
-            futils.copyAsset("chdman", binaryDir.getAbsolutePath());
-            binary.setExecutable(true);
-        }
-    }
-    
     private void enableStoragePermission() {
         final String[] permissions = new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE};
         getInstance().requestPermissions(permissions, PackageManager.PERMISSION_GRANTED);
@@ -58,7 +45,6 @@ public class MainActivity extends AppCompatActivity {
         chdman = new Chdman(getInstance());
         setContentView(R.layout.activity_main);
         enableStoragePermission();
-        extractChdmanBinary();
         menuListener = new PopupMenu.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {

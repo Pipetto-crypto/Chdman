@@ -6,4 +6,7 @@
     <item
         android:id="@+id/batch_compress"
         android:title="Batch Compress"  />
+   <item
+        android:id="@+id/transfer"
+        android:title="Transfer"  />
 </menu>

@@ -3,6 +3,7 @@ package com.chdman.utils;
 import android.app.ActionBar;
 import android.content.DialogInterface;
 
+import android.os.Environment;
 import java.lang.reflect.Field;
 import java.nio.Buffer;
 import java.util.ArrayList;
@@ -79,6 +80,7 @@ public class Chdman {
         dialog = builder.create();
         return dialog;
     }
+    
     private AlertDialog createModesDialog(String title) {
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(mContext);
         AlertDialog dialog;
@@ -120,26 +122,35 @@ public class Chdman {
         handler.post(hideDialog);
     }
     
-    private void processProgressBar(AlertDialog dlg) {
+    public void startCompression() {
         final ExecutorService executor = Executors.newSingleThreadExecutor();
+        AlertDialog progressDialog = createProgressBarDialog("Compress");
+        progressDialog.setMessage("");
+        AlertDialog modesDialog = createModesDialog("Select mode");
+        if (!threadStack.isEmpty())
+            showAlertDialog(modesDialog);
         executor.execute(new Runnable(){
             @Override
             public void run() {
                 Thread processThread = null;
                 File outputFile = null;
-                if (mode != "") {
-                    status = Status.RUNNING;
-                    dlg.setMessage("");
-                    showAlertDialog(dlg);
-                }
                 if (threadStack.isEmpty())
-                    status = Status.COMPLETED; 
-                if (status == Status.RUNNING){
+                    status = Status.COMPLETED;
+                if (status == Status.COMPLETED) {
+                    clean();
+                    hideAlertDialog(progressDialog);
+                    return;    
+                }
+                if (mode != "" && status != Status.RUNNING) {
+                    status = Status.RUNNING;
+                    showAlertDialog(progressDialog);
+                }    
+                if (status == Status.RUNNING) {
                     try {
                         processThread = threadStack.pop();
                         outputFile = fileStack.pop();
                         String fileName = outputFile.getName();
-                        dlg.setMessage(fileName);     
+                        progressDialog.setMessage(fileName);     
                         processThread.start();
                         processThread.join();
                     }
@@ -147,18 +158,17 @@ public class Chdman {
                         throw new RuntimeException(e);
                     }
                 }          
-                if (status == Status.COMPLETED) {
-                    clean();
-                    hideAlertDialog(dlg);
-                    return;    
-                }
                 executor.execute(this);
             } 
         });
     }
     
-    private void createCHD(String file) {
-        String output = file.substring(0, file.lastIndexOf(".")) + ".chd";
+    public void addToCompressionQueue(String file) {
+        String output;
+        if (!file.contains(Environment.getExternalStorageDirectory().getPath())) 
+            output = mContext.getExternalFilesDir("") + "/" + file.substring(file.lastIndexOf("/"), file.lastIndexOf(".")) + ".chd";
+        else 
+            output = file.substring(0, file.lastIndexOf(".")) + ".chd";
         File outputFile = new File(output);
         Runnable r = new Runnable() {
             @Override
@@ -174,24 +184,10 @@ public class Chdman {
             }
         };
         if (!outputFile.exists()) {
-            AlertDialog modesDialog = createModesDialog("Select mode");
-            showAlertDialog(modesDialog);
             fileStack.add(outputFile);
             Thread cmdThread = new Thread(r);
             threadStack.add(cmdThread);
         }    
-    }
-    
-    public void compress(LinkedList<String> list) {
-        AlertDialog dialog = createProgressBarDialog("Compress");
-        for (String file : list) {
-            String extension = file.substring(file.lastIndexOf(".") + 1, file.length());
-            if (extension.equals("iso") || extension.equals("cue") || extension.equals("gdi")) {
-                createCHD(file);
-            }
-        }
-        processProgressBar(dialog);
-        list.clear();    
     }
 
     private native void createcd(String in, String out);

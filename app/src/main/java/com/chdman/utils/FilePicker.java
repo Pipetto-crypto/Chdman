@@ -18,72 +18,19 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.documentfile.provider.DocumentFile;
 import androidx.fragment.app.Fragment;
 
+import com.chdman.MainActivity;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.io.File;
 
 public class FilePicker {
-    private LinkedList<String> openedFiles = new LinkedList<>();
+    private static ArrayList<Uri> openedFiles;
     private Context mContext;
     private ActivityResultLauncher<Intent> arl;
-    
-    private void openFromUri(Uri uri) {
-        ParcelFileDescriptor pfd;
-        String file = "";
-        if (uri.getPath().contains("tree")) {
-            DocumentFile tree = DocumentFile.fromTreeUri(mContext, uri);
-            for (DocumentFile f : tree.listFiles()) {
-                try { 
-                    pfd = mContext.getContentResolver().openFileDescriptor(f.getUri(), "r");
-                    int fd = pfd.getFd();
-                    String linkFilePath = "/proc/self/fd/" + fd;
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        Path linkPath = Paths.get(linkFilePath);
-                        file = Files.readSymbolicLink(linkPath).toString();
-                    }    
-                    else {
-                        File linkFile = new File(linkFilePath);
-                        file = linkFile.getCanonicalPath();
-                    }
-                    pfd.close();  
-                    file = file.replace("/mnt/user/0", "/storage");
-                    file = file.replace("/mnt/media_rw", "/storage");
-                    Log.d("Content picked", file);
-                    openedFiles.add(file);
-                 }            
-                 catch (IOException e) {
-                     throw new RuntimeException(e);
-                 }
-              }
-        }
-        else {
-            try { 
-                pfd = mContext.getContentResolver().openFileDescriptor(uri, "r");
-                int fd = pfd.getFd();
-                String linkFilePath = "/proc/self/fd/" + fd;
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    Path linkPath = Paths.get(linkFilePath);
-                    file = Files.readSymbolicLink(linkPath).toString();
-                }    
-                else {
-                    File linkFile = new File(linkFilePath);
-                    file = linkFile.getCanonicalPath();
-                }
-                pfd.close();  
-                file = file.replace("/mnt/user/0", "/storage");
-                file = file.replace("/mnt/media_rw", "/storage");
-                Log.d("Content picked", file);
-                openedFiles.add(file);
-             }            
-             catch (IOException e) {
-                 throw new RuntimeException(e);
-             }
-        }
-    }
 
     public FilePicker(AppCompatActivity act) {
         this.mContext = act;
@@ -91,15 +38,25 @@ public class FilePicker {
             @Override
             public void onActivityResult(ActivityResult result) {
                 if (result.getResultCode() == Activity.RESULT_OK) {
+                    openedFiles = new ArrayList<>();
                     Intent data = result.getData();
+                    int flags = data.getFlags();
+                    act.getContentResolver().takePersistableUriPermission(data.getData(), (flags & Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION));   
                     if (data.getClipData() != null) {
                         for (int i = 0; i < data.getClipData().getItemCount(); i++) {
-                            openFromUri(data.getClipData().getItemAt(i).getUri());
+                            openedFiles.add(data.getClipData().getItemAt(i).getUri());     
                         }
                     }
-                    else {
-                        openFromUri(data.getData());
-                    }        
+                    else
+                        openedFiles.add(data.getData());
+                    switch (Operations.pendingOperation) {
+                            case "compress":
+                                Operations.compress(act);
+                                break;
+                            case "transfer":
+                                Operations.transfer(act);
+                                break;
+                    }
                 }
             }
         });
@@ -110,16 +67,16 @@ public class FilePicker {
         launcher.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         launcher.addCategory(Intent.CATEGORY_OPENABLE);
         launcher.setType(mimetype);
-        Intent intent = Intent.createChooser(launcher, "Choose a file");
-        this.arl.launch(intent);
+        this.arl.launch(launcher);
     }
     
     public void pickFolder() {
         Intent launcher = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        launcher.setFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
         this.arl.launch(launcher);
     }
 
-    public LinkedList<String> getFilesList() {
-        return this.openedFiles;
+    public static ArrayList<Uri> getFiles() {
+        return openedFiles;
     }
 }

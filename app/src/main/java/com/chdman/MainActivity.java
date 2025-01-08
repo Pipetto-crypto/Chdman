@@ -44,10 +44,6 @@ public class MainActivity extends AppCompatActivity {
     
     private FilePicker picker;
     private static MainActivity instance;
-    private ActivityResultLauncher<Intent> selectItems;
-    private ActivityResultLauncher<Intent> selectFolder;
-    private UriParser uriParser;
-    private ArrayList<Uri> filesToMove;
     private PopupMenu.OnMenuItemClickListener menuListener;
     private View.OnClickListener clickListener;
     private Chdman chdman;
@@ -100,10 +96,5 @@ public class MainActivity extends AppCompatActivity {
         };
         FloatingActionButton btn = findViewById(R.id.fab);
         btn.setOnClickListener(clickListener);
-    }
-    
-    @Override
-    public void onResume() {
-        super.onResume();
     }
 }

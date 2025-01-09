@@ -1,0 +1,21 @@
+<PreferenceScreen
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    
+    <PreferenceCategory
+        app:title="General" >
+        
+        <SwitchPreferenceCompat
+            app:key="deletesource"
+            app:title="Delete input file after compression" 
+            app:defaultValue="true" />
+        
+        <ListPreference
+            app:key="theme"
+            app:title="Theme"
+            app:defaultValue="Light"
+            app:entries="@array/themes"
+            app:entryValues="@array/themes" />
+        
+    </PreferenceCategory>     
+    
+</PreferenceScreen>

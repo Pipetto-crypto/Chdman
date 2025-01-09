@@ -48,8 +48,9 @@ public class Chdman {
     private Handler handler;
     private String mode;
     private Status status;
-    private LinkedList<BufferedReader> outputBufferStack;
-    private LinkedList<File> fileStack;
+    public static boolean deleteInput = true;
+    private LinkedList<File> inputStack;
+    private LinkedList<File> outputStack;
     private LinkedList<Thread> threadStack;
     private Context mContext;
     
@@ -57,15 +58,15 @@ public class Chdman {
         this.mContext = ctx;
         this.mode = "";
         this.handler = new Handler(Looper.getMainLooper());
-        this.fileStack = new LinkedList<>();
-        this.outputBufferStack = new LinkedList<>();
+        this.inputStack = new LinkedList<>();
+        this.outputStack = new LinkedList<>();
         this.threadStack = new LinkedList<>();
         this.status = Status.INITIALIZED;
     }
     
     private void clean() {
-        fileStack.clear();
-        outputBufferStack.clear();
+        inputStack.clear();
+        outputStack.clear();
         threadStack.clear();
         mode = "";
         status = Status.REINITIALIZED;
@@ -133,6 +134,7 @@ public class Chdman {
             @Override
             public void run() {
                 Thread processThread = null;
+                File inputFile = null;    
                 File outputFile = null;
                 if (threadStack.isEmpty())
                     status = Status.COMPLETED;
@@ -148,11 +150,20 @@ public class Chdman {
                 if (status == Status.RUNNING) {
                     try {
                         processThread = threadStack.pop();
-                        outputFile = fileStack.pop();
-                        String fileName = outputFile.getName();
-                        progressDialog.setMessage(fileName);     
+                        inputFile = inputStack.pop();  
+                        outputFile = outputStack.pop();
+                        String inputfileName = inputFile.getName();    
+                        String outputfileName = outputFile.getName();
+                        progressDialog.setMessage(outputfileName);     
                         processThread.start();
                         processThread.join();
+                        if (deleteInput) {
+                            if (inputfileName.endsWith(".cue")) {
+                                String binInputFile = inputfileName.substring(0, inputfileName.lastIndexOf(".")) + ".bin"; 
+                                new File(inputFile.getParent(), binInputFile).delete();       
+                            }
+                            inputFile.delete();    
+                        }  
                     }
                     catch (InterruptedException e) {
                         throw new RuntimeException(e);
@@ -184,7 +195,8 @@ public class Chdman {
             }
         };
         if (!outputFile.exists()) {
-            fileStack.add(outputFile);
+            inputStack.add(new File(file));
+            outputStack.add(outputFile);
             Thread cmdThread = new Thread(r);
             threadStack.add(cmdThread);
         }    

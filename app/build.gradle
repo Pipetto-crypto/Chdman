@@ -57,6 +57,7 @@ dependencies {
     implementation libs.constraintlayout
     implementation libs.navigation.fragment
     implementation libs.navigation.ui
+    implementation "androidx.preference:preference-ktx:1.2.0"
     implementation libs.navigation.runtime
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit

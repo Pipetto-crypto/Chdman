@@ -3,7 +3,9 @@ package com.chdman.utils;
 import android.app.ActionBar;
 import android.content.DialogInterface;
 
+import android.content.SharedPreferences;
 import android.os.Environment;
+import androidx.preference.PreferenceManager;
 import java.lang.reflect.Field;
 import java.nio.Buffer;
 import java.util.ArrayList;
@@ -48,7 +50,7 @@ public class Chdman {
     private Handler handler;
     private String mode;
     private Status status;
-    public static boolean deleteInput = true;
+    public static boolean deleteInput;
     private LinkedList<File> inputStack;
     private LinkedList<File> outputStack;
     private LinkedList<Thread> threadStack;
@@ -57,6 +59,8 @@ public class Chdman {
     public Chdman(Context ctx) {
         this.mContext = ctx;
         this.mode = "";
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(mContext);
+        deleteInput = sp.getBoolean("deletesource", true);
         this.handler = new Handler(Looper.getMainLooper());
         this.inputStack = new LinkedList<>();
         this.outputStack = new LinkedList<>();

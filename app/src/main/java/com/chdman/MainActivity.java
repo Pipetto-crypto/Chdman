@@ -26,6 +26,7 @@ import android.view.View;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.appcompat.widget.Toolbar;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.core.content.FileProvider;
 import androidx.core.provider.DocumentsContractCompat;
 import androidx.documentfile.provider.DocumentFile;
@@ -110,11 +111,12 @@ public class MainActivity extends AppCompatActivity {
         MenuItem.OnMenuItemClickListener listener;
         PreferenceManager.setDefaultValues(getInstance(), R.xml.preferences, false);
         enableStoragePermission();
-        setContentView(R.layout.activity_main);
+        View v = getLayoutInflater().inflate(R.layout.activity_main, null, false);
+        settingsButton = v.findViewById(R.id.settings_button);
+        setEnabledTheme(getEnabledTheme());
+        setContentView(v);
         Toolbar mainToolbar = (Toolbar) findViewById(R.id.main_toolbar);
         setSupportActionBar(mainToolbar);
-        settingsButton = (ImageButton) findViewById(R.id.settings_button);
-        setEnabledTheme(getEnabledTheme());
         menuListener = new PopupMenu.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {

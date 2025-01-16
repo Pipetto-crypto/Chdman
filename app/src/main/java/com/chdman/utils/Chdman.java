@@ -103,6 +103,12 @@ public class Chdman {
                 mode = sp.getSelectedItem().toString();
             }
         });
+        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+            dialog.dismiss();
+            }
+        });
         dialog = builder.create();
         return dialog;
     }
